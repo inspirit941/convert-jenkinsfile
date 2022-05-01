@@ -10,7 +10,6 @@ import (
 
 	"github.com/alecthomas/participle"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -60,7 +59,7 @@ var (
 	supportedSteps = []string{
 		"sh",
 		"dir",
-		"container",
+		//"container", https://www.jenkins.io/doc/pipeline/steps/kubernetes/#-container-run-build-steps-in-a-container
 	}
 
 	// Environment variables to remove from the Jenkinsfile
@@ -138,36 +137,53 @@ func (m *Model) ToYaml() (string, bool, error) {
 	var lines []string
 	conversionIssues := false
 
-	lines = append(lines, "buildPack: none")
-	lines = append(lines, "pipelineConfig:")
+	pipelineIndent := 0
+	lines = append(lines, indentLine("name: github-action.yaml file Created by m2ga", pipelineIndent))
 
+	// env
 	envLines, err := toEnvYamlLines(m.getEnvironment())
 	if err != nil {
 		return "", conversionIssues, err
 	}
 	if len(envLines) > 0 {
 		realEnvLines := containsRealEnvLines(envLines)
-		envLineIndent := 1
+		envLineIndent := 0
 		if realEnvLines {
-			lines = append(lines, indentLine("env:", 1))
-			envLineIndent = 2
+			lines = append(lines, indentLine("env:", pipelineIndent))
+			envLineIndent = 1
 		}
 		for _, envLine := range envLines {
+			// list라서 생긴 -를 공백으로 변경
+			envLine = strings.Replace(envLine, "- ", "", 1)
 			lines = append(lines, indentLine(envLine, envLineIndent))
 		}
 	}
+	// <br>
+	lines = append(lines, indentLine("", pipelineIndent))
 
-	lines = append(lines, indentLine("pipelines:", 1))
+	// on
+	lines = append(lines, indentLine("# setting github branch triggers: default-branch.", pipelineIndent))
+	lines = append(lines, indentLine("# for customizing: please check https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#on", pipelineIndent))
+	lines = append(lines, indentLine("on:", pipelineIndent))
+	var onTrigger = []string{"push", "pull_request"}
+	for _, trigger := range onTrigger {
+		lines = append(lines, indentLine(fmt.Sprintf("%s:", trigger), pipelineIndent+1))
+		lines = append(lines, indentLine("branches:", pipelineIndent+2))
+		lines = append(lines, indentLine("- master", pipelineIndent+3))
+	}
+
+	// jobs
+	lines = append(lines, indentLine("jobs:", pipelineIndent))
 	post := m.getPost()
 	if len(post) > 1 || (len(post) == 1 && !post[0].isDefaultCleanWs()) {
 		conversionIssues = true
-		lines = append(lines, indentLine("# The Jenkinsfile contains a post directive for its pipeline. This is not converted.", 2))
-		lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
+		lines = append(lines, indentLine("# The Jenkinsfile contains a post directive for its pipeline. This is not converted.", pipelineIndent+1))
+		//lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", pipelineIndent+1))
 	}
 	for _, u := range m.getUnsupported() {
 		conversionIssues = true
-		lines = append(lines, indentLine(fmt.Sprintf("# The Jenkinsfile contains the %s directive for its pipeline. This is not converted.", u.Name), 2))
-		lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
+		lines = append(lines, indentLine(fmt.Sprintf("# The Jenkinsfile contains the %s directive for its pipeline. This is not converted.", u.Name), pipelineIndent+1))
+		//lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", pipelineIndent+1))
 	}
 
 	var releaseStages []*ModelStage
@@ -193,13 +209,13 @@ func (m *Model) ToYaml() (string, bool, error) {
 		if len(post) > 0 {
 			conversionIssues = true
 			lines = append(lines, indentLine(fmt.Sprintf("# The Jenkinsfile contains a post directive for the stage '%s'. This is not converted.", s.Name), 2))
-			lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
+			//lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
 		}
 
 		for _, u := range s.getUnsupported() {
 			conversionIssues = true
 			lines = append(lines, indentLine(fmt.Sprintf("# The Jenkinsfile contains the %s directive for the stage '%s'. This is not converted.", u.Name, s.Name), 2))
-			lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
+			//lines = append(lines, indentLine("# There is no equivalent behavior in Jenkins X pipelines.", 2))
 		}
 	}
 
@@ -207,15 +223,14 @@ func (m *Model) ToYaml() (string, bool, error) {
 	if err != nil {
 		return "", conversionIssues, err
 	}
-	releaseLines, hasIssuesInRelease, err := prOrReleasePipelineAsYAML(releaseStages, true)
-	if err != nil {
-		return "", conversionIssues, err
-	}
-	if hasIssuesInPr || hasIssuesInRelease {
+	//releaseLines, hasIssuesInRelease, err := prOrReleasePipelineAsYAML(releaseStages, true)
+	//if err != nil {
+	//	return "", conversionIssues, err
+	//}
+	if hasIssuesInPr {
 		conversionIssues = true
 	}
 	lines = append(lines, prLines)
-	lines = append(lines, releaseLines)
 
 	return strings.Join(lines, "\n"), conversionIssues, nil
 }
@@ -223,35 +238,31 @@ func (m *Model) ToYaml() (string, bool, error) {
 func prOrReleasePipelineAsYAML(stages []*ModelStage, isRelease bool) (string, bool, error) {
 	var lines []string
 	conversionIssues := false
-	stepCount := 0
 
 	envVars := make(map[string]*ModelEnvironmentEntry)
 	var stepLines []string
-	image := ""
 
-	var pipelineType string
-	var stageName string
-	var longTypeName string
-	if isRelease {
-		pipelineType = "release"
-		stageName = "Release Build"
-		longTypeName = "release"
-	} else {
-		pipelineType = "pullRequest"
-		stageName = "PR Build"
-		longTypeName = "pull request"
-	}
+	pipelineIndent := 0
+	//lines = append(lines, indentLine("convert-to-github-action:", pipelineIndent))
 
-	lines = append(lines, indentLine(pipelineType+":", 2))
-	lines = append(lines, indentLine("pipeline:", 3))
-	lines = append(lines, indentLine("stages:", 4))
-	lines = append(lines, indentLine("- name: "+stageName, 5))
-
-	for _, s := range stages {
-		stageImage, stageSteps, stageIssues := s.toImageAndSteps()
-		if image == "" {
-			image = stageImage
+	var needsPhase []string
+	for idx, s := range stages {
+		// stage 이름을 하나의 문자열로 인식할 수 있게 변경
+		s.Name = strings.ReplaceAll(s.Name, " ", "_")
+		lines = append(lines, indentLine(fmt.Sprintf("%s:", s.Name), pipelineIndent+1))
+		lines = append(lines, indentLine("runs-on: ubuntu-latest", pipelineIndent+2))
+		if idx != 0 {
+			needsPhase = append(needsPhase, stages[idx-1].Name)
+			lines = append(lines, indentLine("if: ${{ always() }}", pipelineIndent+2))
+			lines = append(lines, indentLine(fmt.Sprintf("needs: [%s]", strings.Join(needsPhase, ", ")), pipelineIndent+2))
 		}
+		lines = append(lines, indentLine("steps: ", pipelineIndent+2))
+
+		lines = append(lines, indentLine("# Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it", pipelineIndent+3))
+		lines = append(lines, indentLine("- uses: actions/checkout@v3", pipelineIndent+3))
+
+		_, stageSteps, stageIssues := s.toImageAndSteps(pipelineIndent + 2)
+
 		if stageIssues {
 			conversionIssues = true
 		}
@@ -261,13 +272,19 @@ func prOrReleasePipelineAsYAML(stages []*ModelStage, isRelease bool) (string, bo
 				envVars[env.Key] = env
 			}
 		}
+		stepCount := 1
+		for _, l := range stageSteps {
+			lines = append(lines, indentLine(fmt.Sprintf("- name: step%d", stepCount), pipelineIndent+3))
+			if strings.HasPrefix(l, "|") {
+				fmt.Println(l)
+			}
+			lines = append(lines, l)
+			stepCount++
+		}
 		stepLines = append(stepLines, stageSteps...)
 	}
-	lines = append(lines, indentLine("agent:", 6))
-	if image == "" {
-		image = "maven"
-	}
-	lines = append(lines, indentLine(fmt.Sprintf("image: %s", image), 7))
+	//lines = append(lines, indentLine("agent:", 6))
+	//lines = append(lines, indentLine(fmt.Sprintf("image: %s", image), 7))
 	var envList []*ModelEnvironmentEntry
 	for _, envVar := range envVars {
 		envList = append(envList, envVar)
@@ -278,26 +295,21 @@ func prOrReleasePipelineAsYAML(stages []*ModelStage, isRelease bool) (string, bo
 	}
 	if len(envYamlLines) > 0 {
 		realEnvLines := containsRealEnvLines(envYamlLines)
-		envLineIndent := 6
+		envLineIndent := pipelineIndent + 3
 		if realEnvLines {
-			lines = append(lines, indentLine("environment:", 6))
-			envLineIndent = 7
+			lines = append(lines, indentLine("environment:", pipelineIndent+3))
+			envLineIndent = pipelineIndent + 4
 		}
 		for _, l := range envYamlLines {
 			lines = append(lines, indentLine(l, envLineIndent))
 		}
 	}
-	lines = append(lines, indentLine("steps:", 6))
+	//lines = append(lines, indentLine("steps:", 6))
 	if len(stepLines) == 0 {
 		conversionIssues = true
-		lines = append(lines, indentLine("# No stages were found that will be run in the "+longTypeName+" pipeline.", 7))
-		lines = append(lines, indentLine("- name: step0", 7))
-		lines = append(lines, indentLine("sh: echo 'No "+longTypeName+" stages found, failing' && exit 1", 8))
-	}
-	for _, l := range stepLines {
-		lines = append(lines, indentLine(fmt.Sprintf("- name: step%d", stepCount), 7))
-		lines = append(lines, l)
-		stepCount++
+		lines = append(lines, indentLine("# No stages were found that will be run.", pipelineIndent+1))
+		lines = append(lines, indentLine("- name: step0", pipelineIndent+1))
+		lines = append(lines, indentLine("runs: echo 'No stages found, failing' && exit 1", pipelineIndent+2))
 	}
 
 	return strings.Join(lines, "\n"), conversionIssues, nil
@@ -341,9 +353,9 @@ type ModelEnvironmentEntry struct {
 
 func toEnvYamlLines(modelVars []*ModelEnvironmentEntry) ([]string, error) {
 	var invalidVars []string
-	var envVars []corev1.EnvVar
+	var envVars []map[string]string
 	for _, e := range modelVars {
-		convertedVars, isInvalid := e.ToJXEnv()
+		convertedVars, isInvalid := e.ToEnv()
 		if isInvalid {
 			invalidVars = append(invalidVars, fmt.Sprintf("# The variable '%s' has the value '%s', which cannot be converted.", e.Key, e.Value.ToString()))
 		} else {
@@ -362,8 +374,8 @@ func toEnvYamlLines(modelVars []*ModelEnvironmentEntry) ([]string, error) {
 	return append(invalidVars, strings.Split(envYaml, "\n")...), nil
 }
 
-// ToJXEnv converts to jenkins-x.yml friendly environment variables
-func (m *ModelEnvironmentEntry) ToJXEnv() ([]corev1.EnvVar, bool) {
+// ToEnv converts to jenkins-x.yml friendly environment variables
+func (m *ModelEnvironmentEntry) ToEnv() ([]map[string]string, bool) {
 	for _, e := range unusedEnvVars {
 		if m.Key == e {
 			return nil, false
@@ -373,41 +385,9 @@ func (m *ModelEnvironmentEntry) ToJXEnv() ([]corev1.EnvVar, bool) {
 	if m.Value.StringValue != nil && strings.Contains(*m.Value.StringValue, "$") {
 		return nil, true
 	}
-	if m.Value.Credential != nil {
-		// Special handling of CHARTMUSEUM_CREDS
-		if m.Key == "CHARTMUSEUM_CREDS" {
-			return []corev1.EnvVar{
-				{
-					Name: "CHARTMUSEUM_CREDS_USR",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: *m.Value.Credential,
-							},
-							Key: "BASIC_AUTH_USER",
-						},
-					},
-				},
-				{
-					Name: "CHARTMUSEUM_CREDS_PSW",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: *m.Value.Credential,
-							},
-							Key: "BASIC_AUTH_PASS",
-						},
-					},
-				},
-			}, false
-		} else {
-			return nil, true
-		}
-	}
 
-	return []corev1.EnvVar{{
-		Name:  m.Key,
-		Value: *m.Value.StringValue,
+	return []map[string]string{{
+		m.Key: *m.Value.StringValue,
 	}}, false
 }
 
@@ -449,7 +429,7 @@ func imageFromContainerStep(step *ModelStep) string {
 }
 
 // toImageAndSteps converts the model to jenkins-x.yml representation
-func (m *ModelStage) toImageAndSteps() (string, []string, bool) {
+func (m *ModelStage) toImageAndSteps(indent int) (string, []string, bool) {
 	var stepLines []string
 
 	var baseSteps []stepDirAndImage
@@ -478,30 +458,34 @@ func (m *ModelStage) toImageAndSteps() (string, []string, bool) {
 	for _, s := range stepsToInclude {
 		var singleStep []string
 
-		if s.step.Name == "sh" {
+		if s.step.Name == "sh" || s.step.Name == "echo" {
 			if len(s.step.Args) != 1 {
 				conversionIssues = true
-				singleStep = append(singleStep, linesForInvalidStep(s.step, "Additional parameters to the Jenkins Pipeline sh step are not supported")...)
+				singleStep = append(singleStep, linesForInvalidStep(s.step, "Additional parameters to the Jenkins Pipeline sh step are not supported", indent)...)
 			} else {
 				arg := s.step.Args[0]
 				if arg.Unnamed == nil {
 					conversionIssues = true
-					singleStep = append(singleStep, linesForInvalidStep(s.step, "Named parameters to the Jenkins Pipeline sh step are not supported")...)
+					singleStep = append(singleStep, linesForInvalidStep(s.step, "Named parameters to the Jenkins Pipeline sh step are not supported", indent)...)
 				} else {
 					jxArgs := s.step.getJxArg()
-					if len(jxArgs) == 1 {
-						singleStep = append(singleStep, indentLine(fmt.Sprintf("sh: %s", jxArgs[0]), 8))
+					if s.step.Name == "echo" {
+						singleStep = append(singleStep, indentLine(fmt.Sprintf("run: %s %s", s.step.Name, strings.Join(jxArgs, " ")), indent+2))
+					} else if len(jxArgs) == 1 {
+						singleStep = append(singleStep, indentLine(fmt.Sprintf("run: %s", jxArgs[0]), indent+2))
+						//singleStep = append(singleStep, indentLine(fmt.Sprintf("shell: sh"), indent))
 					} else {
-						singleStep = append(singleStep, indentLine(fmt.Sprintf("sh: %s", jxArgs[0]), 8))
+						singleStep = append(singleStep, indentLine(fmt.Sprintf("run: %s", jxArgs[0]), indent+2))
+						//singleStep = append(singleStep, indentLine(fmt.Sprintf("shell: sh"), indent))
 						for _, argLine := range jxArgs[1:] {
-							singleStep = append(singleStep, indentLine(argLine, 9))
+							singleStep = append(singleStep, indentLine(argLine, indent+3))
 						}
 					}
 					if s.image != image {
-						singleStep = append(singleStep, indentLine(fmt.Sprintf("image: %s", s.image), 8))
+						singleStep = append(singleStep, indentLine(fmt.Sprintf("image: %s", s.image), indent))
 					}
 					if s.dir != "" {
-						singleStep = append(singleStep, indentLine(fmt.Sprintf("dir: %s", s.dir), 8))
+						singleStep = append(singleStep, indentLine(fmt.Sprintf("working-directory: ./%s", s.dir), indent+2))
 					}
 				}
 			}
@@ -509,7 +493,7 @@ func (m *ModelStage) toImageAndSteps() (string, []string, bool) {
 			// Not a valid step, so add a boilerplate "echo 'step (name) can't be translated' && exit 1" sh, and a
 			// comment with the original text
 			conversionIssues = true
-			singleStep = append(singleStep, linesForInvalidStep(s.step, "")...)
+			singleStep = append(singleStep, linesForInvalidStep(s.step, "", indent)...)
 		}
 		if len(singleStep) > 0 {
 			stepLines = append(stepLines, strings.Join(singleStep, "\n"))
@@ -519,20 +503,20 @@ func (m *ModelStage) toImageAndSteps() (string, []string, bool) {
 	return image, stepLines, conversionIssues
 }
 
-func linesForInvalidStep(step *ModelStep, reason string) []string {
+func linesForInvalidStep(step *ModelStep, reason string, indent int) []string {
 	var stepLines []string
 
-	stepLines = append(stepLines, indentLine(fmt.Sprintf("# The Jenkins Pipeline step %s cannot be translated directly.", step.Name), 8))
+	stepLines = append(stepLines, indentLine(fmt.Sprintf("# The Jenkins Pipeline step %s cannot be translated directly.", step.Name), indent+2))
 	if reason != "" {
-		stepLines = append(stepLines, indentLine(fmt.Sprintf("# %s", reason), 8))
+		stepLines = append(stepLines, indentLine(fmt.Sprintf("# %s", reason), indent+2))
 	} else {
-		stepLines = append(stepLines, indentLine("# You may want to consider adding a shell script to your repository that replicates its behavior.", 8))
+		stepLines = append(stepLines, indentLine("# You may want to consider adding a shell script to your repository that replicates its behavior.", indent+2))
 	}
-	stepLines = append(stepLines, indentLine("# Original step from Jenkinsfile:", 8))
+	stepLines = append(stepLines, indentLine("# Original step from Jenkinsfile:", indent+2))
 	for _, l := range strings.Split(step.toOriginalGroovy(), "\n") {
-		stepLines = append(stepLines, indentLine("# "+l, 8))
+		stepLines = append(stepLines, indentLine("# "+l, indent+2))
 	}
-	stepLines = append(stepLines, indentLine(fmt.Sprintf("sh: echo 'Invalid step %s, failing' && exit 1", step.Name), 8))
+	stepLines = append(stepLines, indentLine(fmt.Sprintf("run: echo 'Invalid step %s, failing' && exit 1", step.Name), indent+2))
 
 	return stepLines
 }

@@ -1,0 +1,63 @@
+name: Jenkins to GithubAction - Created by inspirit941
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+jobs:
+  # The Jenkinsfile contains the options directive for its pipeline. This is not converted.
+  # There is no equivalent behavior in Jenkins X pipelines.
+  run-github-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: step0
+        # The Jenkins Pipeline step echo cannot be translated directly.
+        # You may want to consider adding a shell script to your repository that replicates its behavior.
+        # Original step from Jenkinsfile:
+        # echo clear
+        run: echo 'Invalid step echo, failing' && exit 1
+      - name: step1
+        run: docker stop $(docker ps -aq)
+      - name: step2
+        run: docker rm $(docker ps -aq)
+      - name: step3
+        # The Jenkins Pipeline step deleteDir cannot be translated directly.
+        # You may want to consider adding a shell script to your repository that replicates its behavior.
+        # Original step from Jenkinsfile:
+        # deleteDir()
+        run: echo 'Invalid step deleteDir, failing' && exit 1
+      - name: step4
+        # The Jenkins Pipeline step git cannot be translated directly.
+        # You may want to consider adding a shell script to your repository that replicates its behavior.
+        # Original step from Jenkinsfile:
+        # git(url: "$SOURCE_CODE_URL", branch: "$RELEASE_BRANCH", credentialsId: "$SOURCECODE_JENKINS_CREDENTIAL_ID")
+        run: echo 'Invalid step git, failing' && exit 1
+      - name: step5
+        run: ls -al
+      - name: step6
+        run: docker build -t todo/frontend ./frontend
+      - name: step7
+        run: pwd
+      - name: step8
+        run: pwd
+          dir: backend
+      - name: step9
+        run: gradle clean
+          dir: backend
+      - name: step10
+        run: gradle bootJar
+          dir: backend
+      - name: step11
+        run: docker build -t todo/backend .
+          dir: backend
+      - name: step12
+        run: |
+
+          docker run -d -p 5000:5000 todo/frontend
+
+          docker run -d -p 8080:8080 todo/backend
+
+env:
+  - SOURCECODE_JENKINS_CREDENTIAL_ID: jenking-github-wh
+  - SOURCE_CODE_URL: https://github.com/my-research/todo-with-cicd.git
+  - RELEASE_BRANCH: master

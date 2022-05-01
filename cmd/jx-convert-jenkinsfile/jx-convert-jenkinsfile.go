@@ -1,22 +1,21 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"github.com/jenkins-x/jx-convert-jenkinsfile/pkg/grammar"
+	"github.com/inspirit941/convert-jenkinsfile/pkg/grammar"
 )
 
 func main() {
 
-	dir := flag.String("dir", ".", "the folder to look for a Jenkinsfile and to write the jenkins-x.yml. Defaults to the current directory.")
-
-	flag.Parse()
-
-	model, err := grammar.ParseJenkinsfileInDirectory(*dir)
+	//dir := flag.String("dir", ".", "the folder to look for a Jenkinsfile and to write the jenkins-x.yml. Defaults to the current directory.")
+	//
+	//flag.Parse()
+	dir := "./"
+	model, err := grammar.ParseJenkinsfileInDirectory(dir)
 
 	if err != nil {
 		fmt.Println("Error parsing Jenkinsfile: ", err)
@@ -28,14 +27,14 @@ func main() {
 		fmt.Println("Error converting jenkins-x.yml: ", err)
 		os.Exit(1)
 	}
-	jxYmlFile := filepath.Join(*dir, "jenkins-x.yml")
+	jxYmlFile := filepath.Join(dir, "jenkins-actions2.yml")
 	err = ioutil.WriteFile(jxYmlFile, []byte(asYaml), 0644)
 	if err != nil {
-		fmt.Printf("Error writing to jenkins-x.yml in %s: %s\n", *dir, err)
+		fmt.Printf("Error writing to jenkins-x.yml in %s: %s\n", dir, err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Converted jenkins-x.yml for Jenkinsfile in %s:\n", *dir)
+	fmt.Printf("Converted jenkins-x.yml for Jenkinsfile in %s:\n", dir)
 	if convertIssues {
 		fmt.Println("ATTENTION: Some contents of the Jenkinsfile could not be converted. Please review the jenkins-x.yml for more information.")
 	}
