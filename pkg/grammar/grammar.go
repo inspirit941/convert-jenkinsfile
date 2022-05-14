@@ -59,7 +59,8 @@ var (
 	supportedSteps = []string{
 		"sh",
 		"dir",
-		//"container", https://www.jenkins.io/doc/pipeline/steps/kubernetes/#-container-run-build-steps-in-a-container
+		"container", // https://www.jenkins.io/doc/pipeline/steps/kubernetes/#-container-run-build-steps-in-a-container
+		"withMaven",
 	}
 
 	// Environment variables to remove from the Jenkinsfile
@@ -843,6 +844,7 @@ func ParseJenkinsfile(jenkinsfile string) (*Model, error) {
 
 	replacedJF := strings.ReplaceAll(string(jf), "\\$", "\\\\$")
 	replacedJF = strings.ReplaceAll(replacedJF, ".toLowerCase()", "")
+	replacedJF = strings.ReplaceAll(replacedJF, "agent any", "")
 
 	curlyBlocks := GetBlocks(replacedJF)
 	for _, b := range curlyBlocks {
