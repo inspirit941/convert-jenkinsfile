@@ -318,7 +318,7 @@ func prOrReleasePipelineAsYAML(stages []*ModelStage, isRelease bool) (string, bo
 // UnsupportedModelBlock represents a field that is unsupported and will cause an error.
 type UnsupportedModelBlock struct {
 	Name  string `@Ident`
-	Value string `@RawString`
+	Value string `@String | @RawString`
 }
 
 // ToString converts the model to a rough string form
@@ -328,7 +328,7 @@ func (m *UnsupportedModelBlock) ToString() string {
 
 // ModelPipelineEntry represents the directives that can be contained within the pipeline block
 type ModelPipelineEntry struct {
-	Agent       *ModelAgent              `"agent" "{" @@ "}"`
+	Agent       *ModelAgent              `"agent" "{" @@ "}" `
 	Environment []*ModelEnvironmentEntry `| "environment" "{" { @@ } "}"`
 	Stages      []*ModelStage            `| "stages" "{" { @@ } "}"`
 	Post        []*ModelPostEntry        `| "post" "{" { @@ } "}"`
@@ -337,7 +337,7 @@ type ModelPipelineEntry struct {
 
 // ModelAgent represents the agent block in Declarative
 type ModelAgent struct {
-	Label string `("label" | "kubernetes") @(String|RawString)`
+	Label string `("label" | "kubernetes" | "any") @(String|RawString)`
 }
 
 // ToString converts the model to a rough string form
@@ -986,6 +986,7 @@ func GetBlocks(fullString string) []curlyBlock {
 		// Set the replacement text, in case it's needed. That'll be everything but the opening curly and closing curly
 		// in the original text, which will be replaced with backticks, and with the contents of the block being escaped.
 		block.ReplacementText = fullString[matchingIdx[0]:matchingIdx[1]-1] + "`" + toEscapedFromCurlyString(fromCurly[:closingIndex]) + "`"
+		//block.ReplacementText = fullString[matchingIdx[0]:matchingIdx[1]] + fromCurly[:closingIndex+1]
 
 		// Get any nested for the content within the curlies
 		block.Nested = GetBlocks(fromCurly[:closingIndex-1])
