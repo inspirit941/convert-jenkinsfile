@@ -2,9 +2,9 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ feature/restapi ]
+    branches: [ feature/restapi | master ]
   pull_request:
-    branches: [ feature/restapi ]
+    branches: [ master ]
 
 jobs:
   docker-build-and-push-to-dockerhub:
