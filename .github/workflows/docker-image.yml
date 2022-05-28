@@ -2,7 +2,7 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ feature/restapi ]
+    branches: [ feature/restapi-1 ]
   pull_request:
     branches: [ master ]
 
