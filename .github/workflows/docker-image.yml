@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+      name: checkout Code
     - name: Build the Docker image
-      run: |
-         cd convert-jenkinsfile
-         docker build . --file Dockerfile --tag inspirit941/proj-test:$(date +%s)
+      run: docker build . --file Dockerfile --tag inspirit941/proj-test:$(date +%s)
