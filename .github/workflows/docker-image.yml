@@ -1,0 +1,24 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ feature/restapi ]
+  pull_request:
+    branches: [ feature/restapi ]
+
+jobs:
+  docker-build-and-push-to-dockerhub:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      name: checkout Code
+    - uses: docker/login-action@v2
+      name: docker login
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Build and push the Docker image
+      run: |
+        export TAG=$(date +%s)
+        docker build . --file Dockerfile --tag inspirit941/proj-test
+        docker push inspirit941/proj-test
