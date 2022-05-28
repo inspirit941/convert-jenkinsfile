@@ -12,4 +12,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag inspirit941/proj-test:$(date +%s)
+      run: |
+         cd convert-jenkinsfile
+         docker build . --file Dockerfile --tag inspirit941/proj-test:$(date +%s)
