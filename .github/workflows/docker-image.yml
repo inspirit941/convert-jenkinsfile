@@ -7,12 +7,17 @@ on:
     branches: [ feature/restapi-1 ]
 
 jobs:
-  build:
+  docker-build-and-push-to-dockerhub:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
       name: checkout Code
-    - name: Build the Docker image
+    - uses: docker/login-action@v2
+      name: docker login
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_PASSWORD }}
+    - name: Build and push the Docker image
       run: |
         export TAG=$(date +%s)
         docker build . --file Dockerfile --tag inspirit941/proj-test:$TAG
