@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -792,24 +791,15 @@ func (v *Value) ToString() string {
 
 // ParseJenkinsfileInDirectory looks for a Jenkinsfile in a directory and parses it
 func ParseJenkinsfileInDirectory(dir string) (*Model, error) {
-	dirExists, err := doesDirExist(dir)
+	fileExists, err := doesFileExist(dir)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error checking if %s is a directory", dir)
-	}
-	if !dirExists {
-		return nil, fmt.Errorf("The directory %s does not exist or is not a directory", dir)
-	}
-
-	jf := filepath.Join(dir, "Jenkinsfile")
-	fileExists, err := doesFileExist(jf)
-	if err != nil {
-		return nil, errors.Wrapf(err, "Error checking if %s is a file", jf)
+		return nil, errors.Wrapf(err, "Error checking if %s is a file", dir)
 	}
 	if !fileExists {
-		return nil, fmt.Errorf("The file %s does not exist or is not a file", jf)
+		return nil, fmt.Errorf("The file %s does not exist or is not a file", dir)
 	}
 
-	return ParseJenkinsfile(jf)
+	return ParseJenkinsfile(dir)
 }
 
 // doesFileExist checks if path exists and is a file
