@@ -13,4 +13,7 @@ jobs:
     - uses: actions/checkout@v3
       name: checkout Code
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag inspirit941/proj-test:$(date +%s)
+      run: |
+        export TAG=$(date +%s)
+        docker build . --file Dockerfile --tag inspirit941/proj-test:$TAG
+        docker push inspirit941/proj-test:$TAG
