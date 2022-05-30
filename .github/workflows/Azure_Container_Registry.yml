@@ -1,0 +1,26 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: azure/docker-login@v1
+      with:
+        login-server: m2gabackend.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+
+    - name: Push to Azure Container Registry
+      run: |
+        docker build . -t m2gabackend.azurecr.io/m2ga-backend
+        docker push m2gabackend.azurecr.io/m2ga-backend
