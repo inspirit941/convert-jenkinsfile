@@ -10,12 +10,13 @@ import (
 
 func InitRouter(server *gin.Engine) *gin.Engine {
 	docs.SwaggerInfo.BasePath = "/api/v1"
+	server.Use(CORSMiddleware())
 	v1 := server.Group("/api/v1")
 	{
 		v1.POST("/upload", api.ConvertFile)
 	}
 	server.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
-	server.Use(CORSMiddleware())
+
 	return server
 }
 func CORSMiddleware() gin.HandlerFunc {
